@@ -11,6 +11,8 @@ build/
 
 # Logs
 *.log
+!application/reports/
+!application/reports/*.log
 
 # OS / editor
 .DS_Store

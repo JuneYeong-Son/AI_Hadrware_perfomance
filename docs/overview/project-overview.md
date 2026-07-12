@@ -1,43 +1,46 @@
-# 프로젝트 개요 — AI Hardware Performance
+# 프로젝트 개요: AI Hardware Performance
 
-사용자의 GPU 성능을 진단하고, 다른 GPU/신제품과 비교해 현재 수준을 알려주는 서비스.
+- 상태: GPU Measurer MVP 구현 및 확장 기반 준비
+- 최종 갱신: 2026-07-13
 
-## 핵심 기능
+## 목적
 
-### 1. GPU 정보 수집
-사용자의 GPU 정보와 GPU 성능에 영향을 미치는 정보를 모두 수집한다.
+사용자의 GPU 상태를 로컬에서 수집하고, 실제 센서와 정적 비교 데이터를 함께 사용해 현재 성능 상태를 설명한다. 장기적으로는 데스크톱 UI, 웹 UI, AI 에이전트가 동일한 측정 서비스를 공유하도록 한다.
 
-- GPU 기본 정보: 모델명, 제조사, VRAM 용량, 아키텍처 등
-- 성능 영향 요소(예정):
-  - 드라이버 버전
-  - 코어/메모리 클럭
-  - 온도(발열)
-  - 전력 소비(TDP)
-  - GPU 가동률(utilization)
-  - PCIe 대역폭 등
+## 현재 제공 기능
 
-### 2. 벤치마크 & 비교 평가
-벤치마크를 실행할 수 있는 프로그램을 구동하여, 사용자 GPU 성능이
-- **신제품(새 상품) 대비** 얼마나 되는지
-- **다른 GPU 대비** 현재 어느 수준인지
+- GPU 이름, UUID, 드라이버, VBIOS, PCI, VRAM, 최대 클럭 조회
+- 온도, 사용률, 메모리, 전력, 클럭, P-state 실시간 수집
+- 센서 현재·최소·최대·평균값 표시
+- 센서 CSV와 시간 측정 로그 생성
+- PassMark 및 Compute API CSV의 정확한 모델 매칭
+- Graphics Card, Sensors, Advanced, Validation 데스크톱 UI
+- `health`, `list`, `inspect`, `snapshot`, `report` JSON CLI
 
-를 알려준다. 평가 지표에는 **발열, 속도, GPU 가동률** 등이 포함된다.
+## 확장 구조
 
-### 3. 백엔드 저장
-수집·측정한 GPU 성능 정보를 백엔드에 저장한다.
+```text
+제조사 수집기
+  NVIDIA nvidia-smi / NVML
+  AMD AMD SMI (계획)
+  Intel Level Zero Sysman (계획)
+        ↓
+GpuCollector 공통 계약
+        ↓
+GpuMeasurementService
+        ↓
+Desktop UI | JSON CLI | Web API (계획) | MCP tools (계획)
+```
 
-## 구조 (예정)
+수집기와 사용자 인터페이스 사이에 서비스 계층을 둬 웹이나 에이전트가 Tk UI를 직접 호출하지 않도록 한다.
 
-- `application/` — 백엔드 (성능 데이터 저장/비교 API)
-- `web/` — 프론트엔드 (진단 결과 표시)
+## 데이터 원칙
 
-## 열린 질문 / 미정 사항
+- 정적 GPU 사양·비교 점수와 현재 컴퓨터의 동적 센서를 구분한다.
+- 모델명이 정확히 일치하지 않으면 다른 GPU의 점수를 현재 GPU 점수로 사용하지 않는다.
+- 측정 결과에는 시각, 표본 수, 간격, 환경과 원시 샘플을 함께 남긴다.
+- 자동화 출력은 `schema_version`이 있는 JSON 계약으로 제공한다.
 
-- 어떤 벤치마크 프로그램을 사용할지 (기존 툴 연동 vs 자체 구현)
-- 비교 기준 데이터(다른 GPU/신제품 성능)를 어디서 가져올지
-- 백엔드 기술 스택 및 저장 방식(DB)
-- 클라이언트에서 GPU 정보를 수집하는 방법(OS별 도구, 라이브러리)
+## 다음 단계
 
----
-
-_최초 작성: 2026-07-09 (사용자 구두 개요 기반)_
+웹 UI와 AI 에이전트 도구 호출 개발은 [웹 및 AI 에이전트 개발 백로그](../backlogs/web-and-agent-development.md)에 정의한다.
