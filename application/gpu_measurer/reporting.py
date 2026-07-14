@@ -15,9 +15,39 @@ SUMMARY_FIELDS = [
     "memory_controller_pct",
     "memory_used_mib",
     "power_draw_w",
+    "power_limit_w",
     "graphics_clock_mhz",
     "memory_clock_mhz",
 ]
+
+
+def summarize_throttle(samples: list[SensorSnapshot]) -> dict[str, object]:
+    """How much throttling was observed during the measurement.
+
+    Factual counts from the collected samples — not an estimate. ``supported`` is
+    False when the driver never reported a throttle field (older drivers).
+    """
+    supported = any(
+        sample.values.get("throttle_reasons_active") is not None for sample in samples
+    )
+    total = sum(
+        1 for sample in samples if sample.values.get("throttle_reasons_active") is not None
+    )
+    throttled = 0
+    reasons: dict[str, int] = {}
+    for sample in samples:
+        value = sample.values.get("throttle_reasons_active")
+        if not isinstance(value, str) or value in {"", "none"}:
+            continue
+        throttled += 1
+        for reason in value.split(","):
+            reasons[reason] = reasons.get(reason, 0) + 1
+    return {
+        "supported": supported,
+        "total_samples": total,
+        "throttled_samples": throttled,
+        "reasons": reasons,
+    }
 
 
 def summarize_snapshots(samples: list[SensorSnapshot]) -> dict[str, dict[str, float]]:

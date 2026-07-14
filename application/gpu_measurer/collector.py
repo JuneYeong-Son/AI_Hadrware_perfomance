@@ -86,6 +86,47 @@ SENSOR_ALIASES = {
     "utilization.decoder": "decoder_utilization_pct",
 }
 
+# Best-effort fields queried separately: nvidia-smi renamed the throttle field
+# across versions, and older drivers do not support it at all. A failure here
+# must never break the core snapshot, so it is collected in its own call and
+# falls back to ``None`` (never estimated).
+THROTTLE_FIELD_CANDIDATES = [
+    "clocks_event_reasons.active",
+    "clocks_throttle_reasons.active",
+]
+
+# nvidia-smi active reasons bitmask (documented in nvml.h).
+THROTTLE_REASON_BITS = [
+    (0x0000000000000002, "applications_clocks_setting"),
+    (0x0000000000000004, "sw_power_cap"),
+    (0x0000000000000008, "hw_slowdown"),
+    (0x0000000000000010, "sync_boost"),
+    (0x0000000000000020, "sw_thermal_slowdown"),
+    (0x0000000000000040, "hw_thermal_slowdown"),
+    (0x0000000000000080, "hw_power_brake_slowdown"),
+    (0x0000000000000100, "display_clock_setting"),
+]
+
+
+def decode_throttle_reasons(raw: str | None) -> list[str] | None:
+    """Decode the active-throttle hex bitmask into reason names.
+
+    Returns ``None`` when unsupported/unknown, an empty list when the GPU
+    reported no active throttle reason (bitmask 0x0), and the list of active
+    reasons otherwise.
+    """
+
+    if raw is None:
+        return None
+    text = raw.strip()
+    if not text or text in {"[N/A]", "N/A", "Not Supported"}:
+        return None
+    try:
+        mask = int(text, 16) if text.lower().startswith("0x") else int(text, 16)
+    except ValueError:
+        return None
+    return [name for bit, name in THROTTLE_REASON_BITS if mask & bit]
+
 
 def _creation_flags() -> int:
     return getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -177,7 +218,24 @@ class NvidiaCollector:
                 values[key] = None if raw_value in {"[N/A]", "N/A"} else raw_value
             else:
                 values[key] = _number(raw_value)
+        values["throttle_reasons_active"] = self._throttle_reasons(gpu_index)
         return SensorSnapshot(datetime.now().astimezone(), gpu_index, values)
+
+    @staticmethod
+    def _throttle_reasons(gpu_index: int) -> str | None:
+        """Best-effort active throttle reasons; ``None`` if unsupported."""
+        for field in THROTTLE_FIELD_CANDIDATES:
+            try:
+                rows = _run_nvidia_smi([field], gpu_index)
+            except NvidiaSmiError:
+                continue
+            if not rows:
+                continue
+            reasons = decode_throttle_reasons(rows[0].get(field))
+            if reasons is None:
+                return None
+            return ",".join(reasons) if reasons else "none"
+        return None
 
     @staticmethod
     def environment() -> dict[str, str]:

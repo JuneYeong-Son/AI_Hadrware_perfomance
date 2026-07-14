@@ -1,0 +1,15 @@
+# Core CLI + measurement engine runs on the Python standard library only.
+# The features below are optional and enable extra capabilities:
+
+# Desktop apps (GPU Check / GPU Ops)
+PySide6>=6.6
+
+# Real GPU compute workload (achieved TFLOPS). Install the CUDA build that
+# matches your driver, e.g.:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+# Without torch+CUDA the engine still runs but reports no achieved TFLOPS.
+torch
+
+# Static benchmark reference tooling (already used by the collector path)
+# numpy is pulled in by torch; listed here for the data_prep scripts.
+numpy

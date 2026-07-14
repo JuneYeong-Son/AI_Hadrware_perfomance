@@ -25,3 +25,17 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Locally generated GPU baselines (per-machine data, not source)
+application/baselines/
+# Cumulative usage/throttle observations (per-machine data)
+application/monitor/
+# Generated validation reports (keep example .log only)
+application/reports/*.txt
+
+# Secrets / credentials — never commit
+application/kaggle.json
+kaggle.json
+
+# Local datasets (not source)
+application/data/
