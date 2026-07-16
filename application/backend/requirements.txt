@@ -1,0 +1,9 @@
+# GPU-Perf backend (FastAPI). Python 3.11+.
+#   pip install -r requirements.txt
+#   uvicorn app.main:app --reload
+fastapi>=0.110
+uvicorn[standard]>=0.27
+SQLAlchemy>=2.0
+PyJWT>=2.8
+bcrypt>=4.1
+email-validator>=2.1
