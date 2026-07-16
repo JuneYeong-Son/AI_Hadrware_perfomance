@@ -49,19 +49,19 @@ class RangeGauge(QWidget):
         def x_at(pct: float) -> float:
             return max(0.0, min(1.0, pct / 100.0)) * w
 
-        # Track
+        # Track (angular 2px corners per NVIDIA design)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor("#eef1f6"))
-        painter.drawRoundedRect(0, top, w, track_h, radius, radius)
+        painter.setBrush(QColor("#f7f7f7"))
+        painter.drawRoundedRect(0, top, w, track_h, 2, 2)
 
-        # Normal-range band
+        # Normal-range band (pale NVIDIA green)
         band_x = x_at(self._low)
         band_w = x_at(self._high) - band_x
-        painter.setBrush(QColor("#cfe8d8"))
-        painter.drawRoundedRect(int(band_x), top, int(band_w), track_h, radius, radius)
+        painter.setBrush(QColor("#e0efc4"))
+        painter.drawRoundedRect(int(band_x), top, int(band_w), track_h, 2, 2)
 
         # Band caption
-        painter.setPen(QColor("#41505f"))
+        painter.setPen(QColor("#757575"))
         font = QFont()
         font.setPointSize(8)
         painter.setFont(font)
@@ -71,7 +71,7 @@ class RangeGauge(QWidget):
         if self._value is not None:
             mx = x_at(self._value)
             inside = self._value >= self._low
-            color = QColor("#2f9e5b") if inside else QColor("#d9a406")
+            color = QColor("#5a8d00") if inside else QColor("#b25200")
             painter.setBrush(color)
             painter.setPen(Qt.NoPen)
             painter.drawEllipse(int(mx) - 7, top - 3, 14, 20)
@@ -97,7 +97,7 @@ class StatusBadge(QLabel):
         label, fg, bg = status_style(status)
         self.setText(f"  {label}  " if label else "")
         self.setStyleSheet(
-            f"background:{bg}; color:{fg}; border-radius:11px;"
+            f"background:{bg}; color:{fg}; border-radius:2px;"
             f"padding:3px 10px; font-weight:700;"
         )
 
@@ -129,7 +129,15 @@ class InfoDot(QLabel):
 
 
 class Card(QFrame):
-    """A white rounded container with a vertical layout."""
+    """A white, hairline-bordered container with a green corner square.
+
+    Per the NVIDIA design system, every reusable card carries a small solid
+    green square anchored to its top-left corner — the system's signature
+    ornamental "identity tag". The container itself is flat (no shadow) with a
+    2px radius and a 1px hairline border (styled via ``QFrame#Card``).
+    """
+
+    _CORNER = 12  # px — 12x12 corner square per DESIGN-nvidia.md
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -137,6 +145,15 @@ class Card(QFrame):
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(18, 16, 18, 16)
         self._layout.setSpacing(8)
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#76b900"))
+        # Inset by the 1px border so the square sits cleanly inside the corner.
+        painter.drawRect(1, 1, self._CORNER, self._CORNER)
+        painter.end()
 
     def layout(self) -> QVBoxLayout:  # type: ignore[override]
         return self._layout

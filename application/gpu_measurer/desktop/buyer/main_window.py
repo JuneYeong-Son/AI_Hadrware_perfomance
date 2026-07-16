@@ -6,12 +6,14 @@ One window with three pages: Home, Progress, Result.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 from PySide6.QtCore import QElapsedTimer, Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QButtonGroup,
     QComboBox,
     QFileDialog,
@@ -41,6 +43,7 @@ from ...models import WorkloadSpec
 from ...report_builder import verdict
 from ...reporting import summarize_throttle
 from ...serialization import redact_sensitive_data
+from ..shared.api_client import ApiError
 from ..shared.service_adapter import UiServiceAdapter
 from ..shared.theme import APP_STYLESHEET
 from ..shared.widgets import (
@@ -140,6 +143,7 @@ class GpuCheckWindow(QMainWindow):
         self._worker: ValidationWorker | None = None
         self._last_result = None
         self._last_payload: dict | None = None
+        self._verify_code = ""
         self._elapsed = QElapsedTimer()
 
         self._benchmarking = False
@@ -388,7 +392,7 @@ class GpuCheckWindow(QMainWindow):
             ("관찰된 최고 온도", f"{peak:.0f}°C" if peak is not None else "—"),
         ]
         body = "".join(
-            f"<tr><td style='color:#6c757d;padding:2px 24px 2px 0'>{label}</td>"
+            f"<tr><td style='color:#757575;padding:2px 24px 2px 0'>{label}</td>"
             f"<td><b>{value}</b></td></tr>"
             for label, value in rows
         )
@@ -452,7 +456,7 @@ class GpuCheckWindow(QMainWindow):
                 if is_current:
                     from PySide6.QtGui import QColor, QFont
 
-                    item.setBackground(QColor("#e7f0ff"))
+                    item.setBackground(QColor("#eef6db"))
                     font = QFont()
                     font.setBold(True)
                     item.setFont(font)
@@ -759,6 +763,45 @@ class GpuCheckWindow(QMainWindow):
         self.limits_label = muted("")
         tech_layout.addWidget(self.limits_label)
         root.addWidget(self.tech_group)
+
+        # 서버 기록 · 진위 증명 공유
+        share_card = Card()
+        share_card.add(h2("결과 기록 · 공유 (진위 증명)"))
+        share_card.add(
+            muted(
+                "측정을 서버에 기록하면 위조할 수 없는 검증 코드가 생겨요. "
+                "이 코드를 상대에게 주면, 상대는 확인 링크에서 결과의 진위를 직접 검증할 수 있어요."
+            )
+        )
+        self.upload_button = QPushButton("결과 서버에 기록하고 공유 코드 받기")
+        self.upload_button.clicked.connect(self._upload_result)
+        share_card.add(self.upload_button)
+
+        # 업로드 성공 후에만 보이는 코드 영역.
+        self.share_result = QWidget()
+        share_box = QVBoxLayout(self.share_result)
+        share_box.setContentsMargins(0, 8, 0, 0)
+        share_box.setSpacing(4)
+        share_box.addWidget(muted("검증 코드 (이 코드를 공유하세요)"))
+        self.share_verify_label = QLabel("")
+        self.share_verify_label.setObjectName("H1")
+        self.share_verify_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        share_box.addWidget(self.share_verify_label)
+        self.share_device_label = muted("")
+        share_box.addWidget(self.share_device_label)
+        self.share_link_label = QLabel("")
+        self.share_link_label.setObjectName("Muted")
+        self.share_link_label.setWordWrap(True)
+        self.share_link_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        share_box.addWidget(self.share_link_label)
+        self.copy_button = QPushButton("검증 코드 복사")
+        self.copy_button.setObjectName("Secondary")
+        self.copy_button.clicked.connect(self._copy_verify_code)
+        share_box.addWidget(self.copy_button)
+        self.share_result.setVisible(False)
+        share_card.add(self.share_result)
+        root.addWidget(share_card)
+
         root.addStretch(1)
 
         actions = QHBoxLayout()
@@ -864,6 +907,9 @@ class GpuCheckWindow(QMainWindow):
     }
 
     def _show_result(self, result, payload: dict) -> None:
+        # A fresh result invalidates any previously shown verify code.
+        self._verify_code = ""
+        self.share_result.setVisible(False)
         the_verdict = verdict(result)
         self.verdict_badge.set_status(the_verdict)
         self.summary_label.setText(self._SUMMARY.get(the_verdict, ""))
@@ -883,12 +929,12 @@ class GpuCheckWindow(QMainWindow):
                     self.range_status.setText(
                         f"✅ 이 검사에서 정상 GPU가 보통 내는 범위({low}~{high}%) 안이에요."
                     )
-                    self.range_status.setStyleSheet("color:#0f5132; font-weight:600;")
+                    self.range_status.setStyleSheet("color:#3f8500; font-weight:600;")
                 else:
                     self.range_status.setText(
                         f"⚠️ 이 검사의 정상 범위({low}~{high}%)보다 낮아요. 냉각·전원 상태나 재검사를 확인하세요."
                     )
-                    self.range_status.setStyleSheet("color:#664d03; font-weight:600;")
+                    self.range_status.setStyleSheet("color:#b25200; font-weight:600;")
             else:
                 self.spec_gauge.setVisible(False)
                 self.range_status.setText("")
@@ -961,11 +1007,11 @@ class GpuCheckWindow(QMainWindow):
         normal = LOAD_TEMPERATURE_NORMAL_MAX_C
         watch = LOAD_TEMPERATURE_THROTTLE_WATCH_C
         if peak < normal:
-            msg, color = f"보통 부하 시 {normal}°C 이하가 정상이에요. 여유가 있어요.", "#0f5132"
+            msg, color = f"보통 부하 시 {normal}°C 이하가 정상이에요. 여유가 있어요.", "#3f8500"
         elif peak < watch:
-            msg, color = f"보통 범위예요 ({normal}~{watch}°C). {watch}°C 이상이면 쓰로틀링 주의.", "#41505f"
+            msg, color = f"보통 범위예요 ({normal}~{watch}°C). {watch}°C 이상이면 쓰로틀링 주의.", "#5e5e5e"
         else:
-            msg, color = f"{watch}°C 이상이라 쓰로틀링이 생길 수 있어요. 냉각 상태를 확인하세요.", "#664d03"
+            msg, color = f"{watch}°C 이상이라 쓰로틀링이 생길 수 있어요. 냉각 상태를 확인하세요.", "#b25200"
         self.temp_guide.setText(msg)
         self.temp_guide.setStyleSheet(f"color:{color};")
 
@@ -999,7 +1045,7 @@ class GpuCheckWindow(QMainWindow):
         if throttled == 0:
             self.throttle_label.setText(f"🧊 쓰로틀링  없음 (측정 {total}회 모두 정상)")
             self.throttle_guide.setText("검사 내내 성능 제한이 관찰되지 않았어요.")
-            self.throttle_guide.setStyleSheet("color:#0f5132;")
+            self.throttle_guide.setStyleSheet("color:#3f8500;")
             return
         reasons = ", ".join(
             THROTTLE_LABELS.get(name, name) for name in summary["reasons"]
@@ -1009,10 +1055,10 @@ class GpuCheckWindow(QMainWindow):
         thermal = any("thermal" in name for name in summary["reasons"])
         if thermal:
             self.throttle_guide.setText("온도로 인한 성능 제한이 있었어요. 냉각 상태를 확인하세요.")
-            self.throttle_guide.setStyleSheet("color:#664d03;")
+            self.throttle_guide.setStyleSheet("color:#b25200;")
         else:
             self.throttle_guide.setText("전력 제한 위주예요 — 고부하에서는 흔한 정상 동작일 수 있어요.")
-            self.throttle_guide.setStyleSheet("color:#41505f;")
+            self.throttle_guide.setStyleSheet("color:#5e5e5e;")
 
     _ABUSE_ICON = {"ok": "✅", "watch": "⚠️", "info": "ℹ️"}
 
@@ -1081,6 +1127,92 @@ class GpuCheckWindow(QMainWindow):
             json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         QMessageBox.information(self, "저장 완료", f"리포트를 저장했습니다:\n{path}")
+
+    # ---- Server record / provenance sharing -----------------------------
+    def _upload_result(self) -> None:
+        session = getattr(self, "auth_session", None)
+        if session is None or not getattr(session, "authenticated", False):
+            QMessageBox.information(
+                self,
+                "로그인 필요",
+                "결과를 서버에 기록하려면 로그인하세요.\n창 우측 하단에서 로그인할 수 있어요.",
+            )
+            return
+        result = self._last_result
+        payload = self._last_payload
+        if result is None or payload is None:
+            return
+        workload = result.workload
+        if not workload.achieved_tflops or workload.reliability != "valid":
+            QMessageBox.warning(
+                self,
+                "기록 불가",
+                "유효한(valid) 측정만 서버에 기록할 수 있어요. 재검사 후 다시 시도하세요.",
+            )
+            return
+        if not self._gpu_uuid:
+            QMessageBox.warning(
+                self,
+                "기록 불가",
+                "GPU 식별자(UUID)를 확인할 수 없어 기기를 등록할 수 없어요.",
+            )
+            return
+
+        # The raw UUID never leaves this machine — only its hash is sent.
+        fingerprint = hashlib.sha256(self._gpu_uuid.encode("utf-8")).hexdigest()
+        gpu_name = self._gpu_name or (workload.device_name or "")
+        performance = result.performance or {}
+        submission = {
+            "device_public_code": None,  # filled in after device registration
+            "gpu_name": gpu_name,
+            "protocol_id": result.protocol_id,
+            "achieved_tflops": workload.achieved_tflops,
+            "dtype": workload.dtype,
+            "matrix_size": workload.shape.get("m"),
+            "peak_tflops": performance.get("theoretical_peak_tflops"),
+            "peak_utilization_pct": performance.get("peak_utilization_pct"),
+            "reliability": workload.reliability,
+            "driver_version": result.device.get("driver_version"),
+            "torch_version": result.environment.get("torch_version"),
+            "cuda_version": result.environment.get("cuda_version"),
+            "timing_source": workload.timing_source,
+            "telemetry_summary": result.telemetry_summary,
+            "raw": redact_sensitive_data(payload),
+        }
+
+        self.upload_button.setEnabled(False)
+        self.upload_button.setText("기록 중…")
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.processEvents()
+        try:
+            device = session.client.register_device(
+                session.token, fingerprint, gpu_name
+            )
+            submission["device_public_code"] = device["public_code"]
+            response = session.client.submit_measurement(session.token, submission)
+        except ApiError as error:
+            QMessageBox.warning(self, "기록 실패", str(error))
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+            self.upload_button.setEnabled(True)
+            self.upload_button.setText("결과 서버에 기록하고 공유 코드 받기")
+
+        self._verify_code = response.get("verify_code", "")
+        base = session.client.base_url
+        share_url = response.get("share_url", f"/api/verify/{self._verify_code}")
+        self.share_verify_label.setText(self._verify_code)
+        self.share_device_label.setText(f"기기 코드: {device['public_code']}")
+        self.share_link_label.setText(f"확인 링크: {base}{share_url}")
+        self.share_result.setVisible(True)
+
+    def _copy_verify_code(self) -> None:
+        if not self._verify_code:
+            return
+        QApplication.clipboard().setText(self._verify_code)
+        QMessageBox.information(
+            self, "복사됨", f"검증 코드 {self._verify_code} 를 클립보드에 복사했어요."
+        )
 
     def _go_home(self) -> None:
         self._refresh_home()
