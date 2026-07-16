@@ -13,10 +13,17 @@
 
 1. 이 저장소를 GitHub에 푸시한다(이미 되어 있음).
 2. [render.com](https://render.com) 로그인 → **New +** → **Blueprint** → 이 저장소 선택.
-3. Render가 `render.yaml`을 읽어 Docker 이미지 빌드 + 무료 Postgres 생성 +
-   `GPUPERF_SECRET_KEY`(자동 랜덤) / `GPUPERF_DATABASE_URL`(자동 연결)을 설정한다.
-4. 배포되면 서비스 URL을 확인한다. 예: `https://gpu-perf-api.onrender.com`
-5. 브라우저로 `https://<서비스URL>/docs`가 열리면 성공.
+3. Render가 `render.yaml`을 읽어 Docker 이미지를 빌드하고 `GPUPERF_SECRET_KEY`
+   (자동 랜덤)를 설정한다.
+4. **DB 연결**: Render 무료 Postgres는 계정당 1개 제한이라 블루프린트가 DB를
+   자동 생성하지 않는다. 배포 중/후에 서비스의 **Environment**에서
+   `GPUPERF_DATABASE_URL` 값에 Postgres 연결 문자열을 넣는다.
+   - 기존 Render Postgres가 있으면 그 **Internal Database URL**을 복사해 넣기, 또는
+   - [neon.tech](https://neon.tech)·[supabase.com](https://supabase.com)에서 무료
+     Postgres를 새로 만들어 그 URL 넣기.
+   - 비워두면 SQLite로 동작하지만 재배포 때마다 데이터가 초기화된다(테스트용만).
+5. 배포되면 서비스 URL을 확인한다. 예: `https://gpu-perf-api.onrender.com`
+6. 브라우저로 `https://<서비스URL>/docs`가 열리면 성공.
 
 > Railway·Fly.io 등 다른 플랫폼도 같은 [`Dockerfile`](../application/backend/Dockerfile)로
 > 배포할 수 있다. 환경변수 `GPUPERF_SECRET_KEY`(≥32바이트 랜덤)와 Postgres용

@@ -1,11 +1,20 @@
-# Render.com Blueprint — one-click deploy of the GPU-Perf backend + Postgres.
+# Render.com Blueprint — deploy the GPU-Perf backend.
 #
 # Deploy: push this repo to GitHub, then on render.com choose
-#   "New +" → "Blueprint" → pick this repo. Render reads this file, builds the
-#   Docker image, provisions a free Postgres database, and wires the env vars.
+#   "New +" → "Blueprint" → pick this repo. Render reads this file and builds
+#   the Docker image.
 #
-# After the first deploy, note the service URL (e.g. https://gpu-perf-api.onrender.com)
-# and put it in the desktop app's gpuperf.config.json (see packaging/README.md).
+# DATABASE: this blueprint does NOT create a database, because Render allows only
+# one free-tier Postgres per account. Provide a Postgres connection string
+# yourself in the GPUPERF_DATABASE_URL env var (Render will prompt for it because
+# of `sync: false`). Good free options:
+#   - Reuse your existing Render Postgres → copy its "Internal Database URL".
+#   - Create a free isolated DB at https://neon.tech or https://supabase.com.
+# If you leave it blank the app falls back to SQLite (data resets on each deploy —
+# only OK for quick testing).
+#
+# After deploy, note the service URL (e.g. https://gpu-perf-api.onrender.com) and
+# put it in the desktop app's gpuperf.config.json (see packaging/README.md).
 services:
   - type: web
     name: gpu-perf-api
@@ -18,14 +27,9 @@ services:
       # Random 32+ byte signing key, generated once and kept by Render.
       - key: GPUPERF_SECRET_KEY
         generateValue: true
-      # Injected from the managed Postgres below.
+      # Paste your Postgres connection string in the Render dashboard.
+      # Leave blank to fall back to (ephemeral) SQLite.
       - key: GPUPERF_DATABASE_URL
-        fromDatabase:
-          name: gpu-perf-db
-          property: connectionString
+        sync: false
       - key: GPUPERF_CORS_ORIGINS
         value: "*"
-
-databases:
-  - name: gpu-perf-db
-    plan: free
