@@ -5,6 +5,21 @@ from __future__ import annotations
 import os
 
 
+def _resolve_database_url() -> str:
+    # Prefer our own var; fall back to the platform-provided DATABASE_URL that
+    # managed hosts (Render/Railway/Fly) inject for their Postgres add-on.
+    url = (
+        os.environ.get("GPUPERF_DATABASE_URL")
+        or os.environ.get("DATABASE_URL")
+        or "sqlite:///./gpuperf.db"
+    )
+    # Heroku/Render hand out the legacy "postgres://" scheme, which SQLAlchemy
+    # 2.0 no longer accepts — normalize it to the psycopg2 dialect URL.
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    return url
+
+
 class Settings:
     def __init__(self) -> None:
         # CHANGE THIS IN PRODUCTION (>=32 bytes). Any token signed with the old
@@ -12,9 +27,7 @@ class Settings:
         self.secret_key = os.environ.get(
             "GPUPERF_SECRET_KEY", "dev-insecure-change-me-0123456789abcdef"
         )
-        self.database_url = os.environ.get(
-            "GPUPERF_DATABASE_URL", "sqlite:///./gpuperf.db"
-        )
+        self.database_url = _resolve_database_url()
         self.algorithm = "HS256"
         # Access tokens are long-lived because the desktop app stores one and
         # "logout" is enforced server-side via the user's token_version.
