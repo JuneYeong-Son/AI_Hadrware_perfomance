@@ -20,13 +20,15 @@ Set-Location $repo
 python -m pip install --upgrade pyinstaller
 python -m pip install -r application\requirements.txt
 
-$common = @("--noconfirm", "--clean", "--windowed", "--paths", "application")
+# --collect-all pip: the lite build has no torch and installs the benchmark
+# engine on demand via in-process pip, so pip must be bundled.
+$common = @("--noconfirm", "--clean", "--windowed", "--paths", "application", "--collect-all", "pip")
 if ($WithTorch) {
     $torch = @("--collect-all", "torch")
-    Write-Host "Building WITH torch (large, benchmark enabled)..." -ForegroundColor Green
+    Write-Host "Building WITH torch (large, benchmark bundled)..." -ForegroundColor Green
 } else {
     $torch = @("--exclude-module", "torch", "--exclude-module", "torchvision", "--exclude-module", "torchaudio")
-    Write-Host "Building WITHOUT torch (small; benchmark disabled)..." -ForegroundColor Yellow
+    Write-Host "Building lite (small; engine downloaded on first benchmark)..." -ForegroundColor Yellow
 }
 
 python -m PyInstaller @common @torch --name "GPU Check" application\gpu_check.py

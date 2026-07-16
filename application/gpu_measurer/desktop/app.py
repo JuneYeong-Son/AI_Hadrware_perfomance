@@ -9,6 +9,11 @@ def _run(window_factory) -> int:
     from PySide6.QtWidgets import QApplication
 
     from .shared.auth_flow import authenticate, install_account_bar
+    from .shared.engine_installer import ensure_engine_on_path
+
+    # If the benchmark engine was installed on a previous run, make it importable
+    # before any service is built so the real torch backend is selected.
+    ensure_engine_on_path()
 
     app = QApplication.instance() or QApplication(sys.argv)
     # Set an app identity so QStandardPaths resolves a stable config directory

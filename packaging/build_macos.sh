@@ -14,7 +14,9 @@ cd "$REPO"
 python3 -m pip install --upgrade pyinstaller
 python3 -m pip install -r application/requirements.txt
 
-COMMON=(--noconfirm --clean --windowed --paths application)
+# --collect-all pip: the app installs the benchmark engine on demand via
+# in-process pip, so pip must be bundled.
+COMMON=(--noconfirm --clean --windowed --paths application --collect-all pip)
 # torch CUDA is unavailable on macOS; keep the bundle small.
 TORCH=(--exclude-module torch --exclude-module torchvision --exclude-module torchaudio)
 

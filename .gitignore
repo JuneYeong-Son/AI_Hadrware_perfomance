@@ -46,3 +46,5 @@ application/data/
 
 # Windows installer output
 installer_out/
+# PyInstaller generated spec (builds use CLI flags; spec is disposable)
+*.spec

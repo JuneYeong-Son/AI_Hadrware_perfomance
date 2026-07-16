@@ -820,8 +820,48 @@ class GpuCheckWindow(QMainWindow):
         self.stack.addWidget(self.result_page)
 
     # ---- Run lifecycle --------------------------------------------------
+    def _ensure_engine_or_prompt(self) -> bool:
+        """Make sure the benchmark engine is present, offering to install it.
+
+        Returns True when a real CUDA benchmark can run. If the engine is
+        missing, prompts to download it; on success the service is rebuilt so
+        the torch backend is used without an app restart.
+        """
+        from ..shared.engine_installer import is_engine_available, torch_importable
+
+        if is_engine_available():
+            return True
+        # torch present but no CUDA device -> installing won't help.
+        if torch_importable():
+            QMessageBox.warning(
+                self,
+                "GPU를 찾을 수 없어요",
+                "이 PC에서 CUDA를 지원하는 NVIDIA GPU를 찾지 못했어요.\n"
+                "NVIDIA GPU와 최신 드라이버가 있어야 성능을 측정할 수 있어요.",
+            )
+            return False
+
+        from ..shared.engine_dialog import EngineInstallDialog
+
+        dialog = EngineInstallDialog(self)
+        dialog.exec()
+        if not dialog.installed:
+            return False
+        # Rebuild the service so it picks up the freshly installed torch backend.
+        self.adapter = UiServiceAdapter.create()
+        if is_engine_available():
+            return True
+        QMessageBox.information(
+            self,
+            "재시작 필요",
+            "엔진 설치가 끝났어요. 앱을 다시 시작하면 성능 측정을 사용할 수 있어요.",
+        )
+        return False
+
     def _start(self, spec: WorkloadSpec) -> None:
         if not self.adapter.is_ready or self.adapter.service is None:
+            return
+        if not self._ensure_engine_or_prompt():
             return
         self._benchmarking = True
         self.stage_label.setText("사전 확인")
