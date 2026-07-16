@@ -21,6 +21,11 @@ uvicorn app.main:app --reload
 
 Then open **http://127.0.0.1:8000/docs** for the interactive Swagger UI.
 
+**Production deploy** (managed hosting + Postgres) and desktop packaging are
+covered in [`packaging/README.md`](../../packaging/README.md); the repo-root
+[`render.yaml`](../../render.yaml) one-click-deploys this backend via the
+included [`Dockerfile`](Dockerfile).
+
 ### Configuration (environment variables)
 
 | Variable | Default | Notes |
