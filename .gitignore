@@ -39,3 +39,10 @@ kaggle.json
 
 # Local datasets (not source)
 application/data/
+
+# Local per-deployment app config (points at your server; not source).
+# The committed template is packaging/gpuperf.config.example.json
+/gpuperf.config.json
+
+# Windows installer output
+installer_out/
