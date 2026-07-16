@@ -8,12 +8,11 @@ message and (when available) the HTTP status code.
 from __future__ import annotations
 
 import json
-import os
 import urllib.error
 import urllib.request
 from typing import Any
 
-DEFAULT_BASE_URL = os.environ.get("GPUPERF_API_URL", "http://127.0.0.1:8000")
+from .app_config import api_base_url
 
 
 class ApiError(Exception):
@@ -37,8 +36,9 @@ def _extract_detail(error: urllib.error.HTTPError) -> str:
 
 
 class ApiClient:
-    def __init__(self, base_url: str = DEFAULT_BASE_URL, timeout: float = 10.0):
-        self.base_url = base_url.rstrip("/")
+    def __init__(self, base_url: str | None = None, timeout: float = 10.0):
+        # Resolve at construction (not import) so an edited config file applies.
+        self.base_url = (base_url or api_base_url()).rstrip("/")
         self.timeout = timeout
 
     def _request(
